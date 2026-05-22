@@ -1,0 +1,12 @@
+substitutions:
+  device_name: ac-mhi-slaapkamer
+  friendly_name: "AC MHI Slaapkamer"  
+  temperature_sensor: sensor.meter_plus_7dc8_temperature
+
+packages:
+  common: !include common/common.yaml
+  mhi: !include common/mhi.yaml
+
+MhiAcCtrl:
+  # Frame size should be 20 for this legacy inverter
+  frame_size: 20

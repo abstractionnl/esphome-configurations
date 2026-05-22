@@ -1,0 +1,54 @@
+substitutions:
+  device_name: ac-mhi-woonkamer
+  friendly_name: "AC MHI Woonkamer"
+  temperature_sensor: sensor.meter_plus_f5bf_temperature
+
+packages:
+  common: !include common/common.yaml
+  mhi: !include common/mhi.yaml
+
+globals:
+  - id: saved_heat_horizontal_vane_position
+    type: std::string
+    restore_value: no
+    initial_value: '"Swing"'
+  - id: saved_cool_dry_horizontal_vane_position
+    type: std::string
+    restore_value: no
+    initial_value: '"Swing"'
+
+switch:
+  - platform: MhiAcCtrl
+    vanes_3d_auto:
+      name: "3D Auto"
+
+select:
+  - platform: MhiAcCtrl
+    horizontal_vanes:
+      name: Horizontal Vanes Position
+      id: horizontal_vanes
+
+script:
+  - id: !extend save_heat_mode_settings
+    then:
+      - lambda: |-
+          id(saved_heat_horizontal_vane_position) = id(horizontal_vanes).current_option();
+  - id: !extend restore_heat_mode_settings
+    then:
+      - select.set:
+          id: horizontal_vanes
+          option: !lambda 'return id(saved_heat_horizontal_vane_position);'
+  - id: !extend save_cool_dry_mode_settings
+    then:
+      - lambda: |-
+          id(saved_cool_dry_horizontal_vane_position) = id(horizontal_vanes).current_option();
+  - id: !extend restore_cool_dry_mode_settings
+    then:
+      - select.set:
+          id: horizontal_vanes
+          option: !lambda 'return id(saved_cool_dry_horizontal_vane_position);'
+
+binary_sensor:
+  - platform: MhiAcCtrl
+    vanes_3d_auto_enabled:
+      name: "3D Auto"

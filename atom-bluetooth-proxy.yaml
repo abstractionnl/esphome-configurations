@@ -1,0 +1,35 @@
+substitutions:
+  device_name: atom-bluetooth-proxy
+  friendly_name: Bluetooth Proxy
+
+packages:
+  common: !include common/common.yaml
+
+esphome:
+  name_add_mac_suffix: false
+  project:
+    name: esphome.bluetooth-proxy
+    version: "1.0"
+
+esp32:
+  board: m5stack-atom
+  framework:
+    type: esp-idf
+
+dashboard_import:
+  package_import_url: github://esphome/bluetooth-proxies/m5stack-atom-lite.yaml@main
+
+esp32_ble_tracker:
+  scan_parameters:
+    # We currently use the defaults to ensure Bluetooth
+    # can co-exist with WiFi In the future we may be able to
+    # enable the built-in coexistence logic in ESP-IDF
+    active: true
+    interval: 1100ms
+    window: 1100ms
+
+bluetooth_proxy:
+  active: true
+  
+wifi:
+  use_address: 192.168.3.76

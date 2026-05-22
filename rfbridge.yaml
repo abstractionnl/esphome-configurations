@@ -1,0 +1,309 @@
+substitutions:
+  device_name: rfbridge
+  friendly_name: "RF Bridge"
+
+packages:
+  common: !include common/common.yaml
+
+esphome:
+  devices:
+    - id: doorbell
+      name: "Deurbel"
+    - id: kaku_remote
+      name: "Klik aan/klik uit afstandsbediening"
+    - id: bedroom_fan
+      name: "Slaapkamer ventilator"
+    - id: livingroom_fan
+      name: "Woonkamer ventilator"
+  on_boot:
+    - binary_sensor.template.publish:
+        id: doorbell_sensor
+        state: OFF
+    - binary_sensor.template.publish:
+        id: button_a_sensor
+        state: OFF
+    - binary_sensor.template.publish:
+        id: button_b_sensor
+        state: OFF
+
+esp8266:
+  board: esp8285
+
+logger:
+  baud_rate: 0
+
+api:
+  services:
+    - service: send_rf_code
+      variables:
+        sync: int
+        low: int
+        high: int
+        code: int
+      then:
+        - rf_bridge.send_code:
+            sync: !lambda 'return sync;'
+            low: !lambda 'return low;'
+            high: !lambda 'return high;'
+            code: !lambda 'return code;'
+
+text_sensor:
+  - platform: template
+    id: "last_rf_code"
+    name: "Last RF Code Received"
+    entity_category: "diagnostic"
+
+binary_sensor:
+  - platform: template
+    id: doorbell_sensor
+    device_id: doorbell
+    name: "Deurbel"
+    filters:
+      - delayed_off: 120s
+  - platform: template
+    id: button_a_sensor
+    device_id: doorbell
+    name: "Knop A"
+    filters:
+      - delayed_off: 120s
+  - platform: template
+    id: button_b_sensor
+    device_id: doorbell
+    name: "Knop B"
+    filters:
+      - delayed_off: 120s
+
+event:
+  - platform: template
+    device_id: kaku_remote
+    id: kaku_a1on
+    name: "KAKU A1 aan"
+    device_class: button
+    event_types:
+      - "pressed"
+  - platform: template
+    device_id: kaku_remote
+    id: kaku_a1off
+    name: "KAKU A1 uit"
+    device_class: button
+    event_types:
+      - "pressed"
+  - platform: template
+    device_id: kaku_remote
+    id: kaku_a2on
+    name: "KAKU A2 aan"
+    device_class: button
+    event_types:
+      - "pressed"
+  - platform: template
+    device_id: kaku_remote
+    id: kaku_a2off
+    name: "KAKU A2 uit"
+    device_class: button
+    event_types:
+      - "pressed"
+  - platform: template
+    device_id: kaku_remote
+    id: kaku_a3on
+    name: "KAKU A3 aan"
+    device_class: button
+    event_types:
+      - "pressed"
+  - platform: template
+    device_id: kaku_remote
+    id: kaku_a3off
+    name: "KAKU A3 uit"
+    device_class: button
+    event_types:
+      - "pressed"
+  - platform: template
+    device_id: bedroom_fan
+    id: fan_topleft_button
+    name: "Ventilator knop linksboven"
+    device_class: button
+    event_types:
+      - "pressed"
+  - platform: template
+    device_id: bedroom_fan
+    id: fan_topright_button
+    name: "Ventilator knop rechtsboven"
+    device_class: button
+    event_types:
+      - "pressed"
+
+
+button:
+  - platform: template
+    device_id: doorbell
+    id: "doorbell_button"
+    name: "Deurbel"
+    on_press:
+      - lambda: id(send_code)->execute(0x568C, 0x0320, 0x0988, 0x0896F5);
+  - platform: template
+    device_id: doorbell
+    id: "button_a"
+    name: "Knop A"
+    on_press:
+      - lambda: id(send_code)->execute(0x63BC, 0x0320, 0x098A, 0x313031);
+  - platform: template
+    device_id: bedroom_fan
+    id: "bedroom_fan_on_off"
+    name: "Slaapkamer ventilator aan/uit"
+    on_press:
+      - lambda: id(send_code)->execute(0x5F80, 0x0320, 0x0996, 0x75B808);
+  - platform: template
+    device_id: bedroom_fan
+    id: "bedroom_fan_faster"
+    name: "Slaapkamer ventilator sneller"
+    on_press:
+      - lambda: id(send_code)->execute(0x5F80, 0x0320, 0x0996, 0x75B808);
+  - platform: template
+    device_id: bedroom_fan
+    id: "bedroom_fan_slower"
+    name: "Slaapkamer ventilator langzamer"
+    on_press:
+      - lambda: id(send_code)->execute(0x5F80, 0x0320, 0x0996, 0x75B80B);
+  - platform: template
+    device_id: livingroom_fan
+    id: "livingroom_fan_on_off"
+    name: "Woonkamer ventilator aan/uit"
+    on_press:
+      - lambda: id(send_code)->execute(0x5940, 0x032E, 0x0950, 0x488708);
+  - platform: template
+    device_id: livingroom_fan
+    id: "livingroom_fan_faster"
+    name: "Woonkamer ventilator sneller"
+    on_press:
+      - lambda: id(send_code)->execute(0x5940, 0x032E, 0x0950, 0x488705);
+  - platform: template
+    device_id: livingroom_fan
+    id: "livingroom_fan_slower"
+    name: "Woonkamer ventilator langzamer"
+    on_press:
+      - lambda: id(send_code)->execute(0x5940, 0x032E, 0x0950, 0x48870B);
+  - platform: template
+    device_id: livingroom_fan
+    id: "livingroom_light_on_off"
+    name: "Woonkamer ventilator lamp"
+    on_press:
+      - lambda: id(send_code)->execute(0x5940, 0x032E, 0x0950, 0x488701);
+
+uart:
+  baud_rate: 19200
+  tx_pin: 1
+  rx_pin: 3
+
+rf_bridge:
+  on_code_received:
+    - homeassistant.event:
+        event: esphome.rf_code_received
+        data:
+          sync: !lambda 'return format_hex(data.sync);'
+          low: !lambda 'return format_hex(data.low);'
+          high: !lambda 'return format_hex(data.high);'
+          code: !lambda 'return format_hex(data.code);'
+    - text_sensor.template.publish:
+        id: last_rf_code
+        state: !lambda 'return format_hex(data.code);'
+    - if:
+        condition:
+          lambda: 'return data.code == 0x313031;'
+        then:
+        - binary_sensor.template.publish:
+            id: doorbell_sensor
+            state: ON
+        - binary_sensor.template.publish:
+            id: doorbell_sensor
+            state: OFF
+    - if:
+        condition:
+          lambda: 'return data.code == 0x0896F5;'
+        then:
+        - binary_sensor.template.publish:
+            id: button_a_sensor
+            state: ON
+        - binary_sensor.template.publish:
+            id: button_a_sensor
+            state: OFF
+    - if:
+        condition:
+          lambda: 'return data.code == 0x07E9D5;'
+        then:
+        - binary_sensor.template.publish:
+            id: button_b_sensor
+            state: ON
+        - binary_sensor.template.publish:
+            id: button_b_sensor
+            state: OFF
+    - if:
+        condition:
+          lambda: 'return data.code == 0x000015;'
+        then:
+        - event.trigger:
+            id: kaku_a1on
+            event_type: "pressed"
+    - if:
+        condition:
+          lambda: 'return data.code == 0x000014;'
+        then:
+        - event.trigger:
+            id: kaku_a1off
+            event_type: "pressed"
+    - if:
+        condition:
+          lambda: 'return data.code == 0x004015;'
+        then:
+        - event.trigger:
+            id: kaku_a2on
+            event_type: "pressed"
+    - if:
+        condition:
+          lambda: 'return data.code == 0x004014;'
+        then:
+        - event.trigger:
+            id: kaku_a2off
+            event_type: "pressed"
+    - if:
+        condition:
+          lambda: 'return data.code == 0x001015;'
+        then:
+        - event.trigger:
+            id: kaku_a3on
+            event_type: "pressed"
+    - if:
+        condition:
+          lambda: 'return data.code == 0x001014;'
+        then:
+        - event.trigger:
+            id: kaku_a3off
+            event_type: "pressed"
+    - if:
+        condition:
+          lambda: 'return data.code == 0x0075b801;'
+        then:
+        - event.trigger:
+            id: fan_topleft_button
+            event_type: "pressed"
+    - if:
+        condition:
+          lambda: 'return data.code == 0x0075b803;'
+        then:
+        - event.trigger:
+            id: fan_topright_button
+            event_type: "pressed"
+
+script:
+  - id: send_code
+    parameters:
+      sync: short
+      low: short
+      high: short
+      code: int
+    then:
+    - rf_bridge.send_code:
+        sync: !lambda return sync;
+        low: !lambda return low;
+        high: !lambda return high;
+        code: !lambda return code;
+    - rf_bridge.beep:
+        duration: 100

@@ -1,0 +1,380 @@
+substitutions:
+  min_temperature: 14
+  max_temperature: 24
+
+esphome:
+  platformio_options:
+    # Run CPU at 160Mhz to fix mhi_ac_ctrl_core.loop error: -2
+    board_build.f_cpu: 160000000L
+
+esp8266:
+  board: d1_mini
+
+external_components:
+  - source: github://ginkage/MHI-AC-Ctrl-ESPHome@master
+    components: [MhiAcCtrl]
+
+# Version 4.0
+MhiAcCtrl:
+  # Only 20 (legacy) or 33 (includes 3D auto and vertical vanes) possible.
+  # If you encounter mhi_ac_ctrl_core.loop error: -2 errors, change the frame_size to 20
+  frame_size: 33
+  external_temperature_sensor: room_temperature_sensor
+  initial_vertical_vanes_position: 1
+  initial_horizontal_vanes_position: 8
+  room_temp_timeout: 30
+
+globals:
+  - id: last_climate_mode
+    type: int
+    restore_value: no
+    initial_value: '-1'
+  - id: saved_heat_fan_mode
+    type: int
+    restore_value: no
+    initial_value: '7'
+  - id: saved_cool_dry_fan_mode
+    type: int
+    restore_value: no
+    initial_value: '7'
+  - id: saved_heat_vane_position
+    type: std::string
+    restore_value: no
+    initial_value: '"Up"'
+  - id: saved_cool_dry_vane_position
+    type: std::string
+    restore_value: no
+    initial_value: '"Up"'
+
+climate:
+  - platform: MhiAcCtrl
+    id: climate_control
+    name: "Airco"
+    temperature_offset: true
+    visual_min_temperature: ${min_temperature}
+    icon: "mdi:air-conditioner"
+    on_state:
+      - lambda: |-
+          const int current_mode = x.mode;
+
+          if (x.mode == CLIMATE_MODE_HEAT_COOL) {
+            if (id(room_temperature_sensor).state <= id(auto_cooling_temperature).state)
+              id(quiet_heating_mode).execute(id(auto_heating_temperature).state);
+            else
+              id(quiet_cooling_mode).execute(id(auto_cooling_temperature).state);
+          }
+
+          if (id(last_climate_mode) == -1) {
+            id(last_climate_mode) = current_mode;
+            return;
+          }
+
+          const int previous_mode = id(last_climate_mode);
+          const bool left_heat = previous_mode == CLIMATE_MODE_HEAT && current_mode != CLIMATE_MODE_HEAT;
+          const bool left_cool_dry = (previous_mode == CLIMATE_MODE_COOL || previous_mode == CLIMATE_MODE_DRY) &&
+                                     (current_mode != CLIMATE_MODE_COOL && current_mode != CLIMATE_MODE_DRY);
+          const bool entered_heat = previous_mode != CLIMATE_MODE_HEAT && current_mode == CLIMATE_MODE_HEAT;
+          const bool entered_cool_dry =
+              (previous_mode != CLIMATE_MODE_COOL && previous_mode != CLIMATE_MODE_DRY) &&
+              (current_mode == CLIMATE_MODE_COOL || current_mode == CLIMATE_MODE_DRY);
+          const bool entered_fan_only = previous_mode != CLIMATE_MODE_FAN_ONLY && current_mode == CLIMATE_MODE_FAN_ONLY;
+
+          // Update last_mode BEFORE calling scripts to prevent re-entrant on_state loops
+          id(last_climate_mode) = current_mode;
+
+          if (left_heat) {
+            id(save_heat_mode_settings).execute();
+          }
+
+          if (left_cool_dry) {
+            id(save_cool_dry_mode_settings).execute();
+          }
+
+          if (entered_heat) {
+            id(restore_heat_mode_settings).execute();
+          }
+
+          if (entered_cool_dry) {
+            id(restore_cool_dry_mode_settings).execute();
+          }
+
+          if (entered_fan_only) {
+            id(activate_quiet_ventilation).execute();
+          }
+
+          if (left_cool_dry) {
+            id(reset_countdown_timer).execute();
+            id(countdown_timer_active).turn_on();
+
+            if (current_mode == CLIMATE_MODE_OFF) {
+              auto call = id(climate_control).make_call();
+              call.set_mode(CLIMATE_MODE_FAN_ONLY);
+              call.perform();
+            }
+          } else if (id(countdown_timer_active).state && current_mode == CLIMATE_MODE_OFF) {
+            auto call = id(climate_control).make_call();
+            call.set_mode(CLIMATE_MODE_FAN_ONLY);
+            call.perform();
+          }
+
+sensor:
+  #external temperature sensor
+  - platform: homeassistant
+    name: "Temperature Sensor From Home Assistant"
+    id: room_temperature_sensor
+    entity_id: ${temperature_sensor}
+    internal: false
+    accuracy_decimals: 1
+    state_class: measurement
+    device_class: temperature
+    unit_of_measurement: "°C"
+    filters:
+      - offset: -0.2
+  #      - offset: !lambda |-
+  #          if (id(climate_control).mode == CLIMATE_MODE_HEAT) {
+  #              return -0.2;
+  #          } else if (id(climate_control).mode == CLIMATE_MODE_COOL) {
+  #              return -1.0;
+  #          } else {
+  #              return 0;
+  #          }
+  - platform: MhiAcCtrl
+    outdoor_temperature:
+      name: "Outdoor temperature"
+    return_air_temperature:
+      name: "Return air temperature"
+    outdoor_unit_fan_speed:
+      name: "Outdoor unit fan speed"
+      state_class: measurement
+    indoor_unit_fan_speed:
+      name: "Indoor unit fan speed"
+      state_class: measurement
+    compressor_frequency:
+      name: "Compressor frequency"
+    current_power:
+      name: "Current draw"
+    energy_used:
+      name: "Energy used"
+    indoor_unit_thi_r1:
+      name: "Indoor (U-bend) HE temp 1"
+    indoor_unit_thi_r2:
+      name: "Indoor (capillary) HE temp 2"
+    indoor_unit_thi_r3:
+      name: "Indoor (suction header) HE temp 3"
+    outdoor_unit_tho_r1:
+      name: "Outdoor HE temp"
+    outdoor_unit_expansion_valve:
+      name: "Outdoor unit exp. valve"
+    outdoor_unit_discharge_pipe:
+      name: "Outdoor unit discharge pipe"
+    outdoor_unit_discharge_pipe_super_heat:
+      name: "Outdoor unit discharge pipe super heat"
+    protection_state_number:
+      name: "Compressor protection code"
+    error_code:
+      name: "Error code"
+
+binary_sensor:
+  - platform: MhiAcCtrl
+    defrost:
+      name: "Defrost"
+  - platform: template
+    name: "Low temperature protection active"
+    id: low_temperature_protection_active
+    lambda: |-
+      if (id(climate_control).mode == CLIMATE_MODE_COOL) return false;
+      return id(low_temperature_protection_active).state
+          ? id(room_temperature_sensor).get_raw_state() <= id(low_temperature_threshold).state + 0.5
+          : id(room_temperature_sensor).get_raw_state() <= id(low_temperature_threshold).state;
+    filters:
+      - delayed_off: 10min
+    on_press:
+      then:
+        - climate.control:
+            id: climate_control
+            mode: "HEAT"
+            target_temperature: !lambda return id(low_temperature_threshold).state;
+    on_release:
+      - climate.control:
+          id: climate_control
+          mode: "OFF"
+
+text_sensor:
+  - platform: MhiAcCtrl
+    protection_state:
+      name: "Compressor protection status"
+
+select:
+  - platform: MhiAcCtrl
+    vertical_vanes:
+      name: Vertical Vanes Position
+      id: vertical_vanes_control
+    fan_speed:
+      name: "Fan Speed"
+      id: fan_speed_control
+
+switch:
+  - platform: template
+    id: countdown_timer_active
+    name: "Countdown timer active"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+button:
+  - platform: template
+    name: "Enable quiet cooling"
+    on_press:
+      - script.execute:
+          id: quiet_cooling_mode
+          target_temperature: !lambda return id(auto_cooling_temperature).state;
+  - platform: template
+    name: "Enable quiet heating"
+    on_press:
+      - script.execute:
+          id: quiet_heating_mode
+          target_temperature: !lambda return id(auto_heating_temperature).state;
+
+number:
+  - platform: template
+    id: auto_heating_temperature
+    name: "Auto mode heating temperature"
+    min_value: ${min_temperature}
+    max_value: ${max_temperature}
+    step: 0.5
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 20
+    device_class: temperature
+    unit_of_measurement: "°C"
+    entity_category: diagnostic
+  - platform: template
+    id: auto_cooling_temperature
+    name: "Auto mode cooling temperature"
+    min_value: ${min_temperature}
+    max_value: ${max_temperature}
+    step: 0.5
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 21
+    device_class: temperature
+    unit_of_measurement: "°C"
+    entity_category: diagnostic
+  - platform: template
+    id: low_temperature_threshold
+    name: "Low temperature threshold"
+    min_value: ${min_temperature}
+    max_value: ${max_temperature}
+    step: 0.5
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: ${min_temperature}
+    device_class: temperature
+    unit_of_measurement: "°C"
+    entity_category: diagnostic
+  - platform: template
+    id: countdown_timer_minutes
+    name: "Countdown timer minutes"
+    min_value: 0
+    max_value: 180
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 60
+    unit_of_measurement: "min"
+    icon: mdi:timer-outline
+
+script:
+  - id: quiet_cooling_mode
+    parameters:
+      target_temperature: float
+    then:
+      - climate.control:
+          id: climate_control
+          mode: COOL
+          target_temperature: !lambda return target_temperature;
+          fan_mode: AUTO
+  - id: quiet_heating_mode
+    parameters:
+      target_temperature: float
+    then:
+      - climate.control:
+          id: climate_control
+          mode: HEAT
+          target_temperature: !lambda return target_temperature;
+          fan_mode: AUTO
+  - id: activate_quiet_ventilation
+    then:
+      - climate.control:
+          id: climate_control
+          fan_mode: QUIET
+      - select.set:
+          id: vertical_vanes_control
+          option: "Up"
+  - id: save_heat_mode_settings
+    then:
+      - lambda: |-
+          id(saved_heat_vane_position) = id(vertical_vanes_control).current_option();
+          id(saved_heat_fan_mode) =
+              (int) id(climate_control).fan_mode.value_or(esphome::climate::CLIMATE_FAN_AUTO);
+  - id: restore_heat_mode_settings
+    then:
+      - lambda: |-
+          auto call = id(climate_control).make_call();
+          call.set_fan_mode((esphome::climate::ClimateFanMode) id(saved_heat_fan_mode));
+          call.perform();
+      - select.set:
+          id: vertical_vanes_control
+          option: !lambda 'return id(saved_heat_vane_position);'
+  - id: save_cool_dry_mode_settings
+    then:
+      - lambda: |-
+          id(saved_cool_dry_vane_position) = id(vertical_vanes_control).current_option();
+          id(saved_cool_dry_fan_mode) =
+              (int) id(climate_control).fan_mode.value_or(esphome::climate::CLIMATE_FAN_AUTO);
+  - id: restore_cool_dry_mode_settings
+    then:
+      - lambda: |-
+          auto call = id(climate_control).make_call();
+          call.set_fan_mode((esphome::climate::ClimateFanMode) id(saved_cool_dry_fan_mode));
+          call.perform();
+      - select.set:
+          id: vertical_vanes_control
+          option: !lambda 'return id(saved_cool_dry_vane_position);'
+  - id: reset_countdown_timer
+    then:
+      - number.set:
+          id: countdown_timer_minutes
+          value: 60
+  - id: on_countdown_timer_finished
+    then:
+      - logger.log: "Countdown timer reached 0 minutes."
+      - switch.turn_off: countdown_timer_active
+      - if:
+          condition:
+            lambda: 'return id(climate_control).mode == CLIMATE_MODE_FAN_ONLY;'
+          then:
+            - climate.control:
+                id: climate_control
+                mode: "OFF"
+
+interval:
+  - interval: 1min
+    then:
+      - if:
+          condition:
+            switch.is_on: countdown_timer_active
+          then:
+            - lambda: |-
+                const float current = id(countdown_timer_minutes).state;
+                if (current > 0) {
+                  id(countdown_timer_minutes).publish_state(current - 1);
+                }
+            - if:
+                condition:
+                  lambda: 'return id(countdown_timer_minutes).state <= 0;'
+                then:
+                  - script.execute: on_countdown_timer_finished
