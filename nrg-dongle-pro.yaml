@@ -1,0 +1,215 @@
+substitutions:
+  device_name: nrg-dongle-pro
+  device_description: "P1 Dongle Pro+ (ESP32) module to read your smart meter"
+  friendly_name: NRG Dongle Pro ( P1 Dongle Pro+ )
+  prj_version: "25.11.01"
+
+packages:
+  common: !include common/common.yaml
+
+esphome:
+  name: ${device_name}
+  comment: "${device_description}" 
+  name_add_mac_suffix: false
+  project: 
+    name: "smartstuff.p1_dongle_pro"
+    version: ${prj_version}
+  platformio_options:
+    upload_speed: 1500000
+    
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+  
+status_led:
+  pin:
+    number: 3
+    inverted: true
+    id: led
+
+wifi:
+  power_save_mode: none
+
+dashboard_import:
+  package_import_url: github://mhendriks/esphome-p1/nrg-dongle-pro.yaml@main
+  
+# Enable logging
+logger:
+  level: INFO
+
+dsmr:
+  water_mbus_id: 2
+  uart_id: p1_uart
+  max_telegram_length: 2400
+
+uart:
+  - id: p1_uart
+    rx_pin:
+      number: 20
+      inverted: true
+    baud_rate: 115200
+    rx_buffer_size: 1700
+  - id: p1_bridge_uart
+    tx_pin:
+      number: 10
+    baud_rate: 115200  
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: 9
+      inverted: true
+      ignore_strapping_warning: true
+      mode:
+        input: true
+        pullup: true
+    
+    name: PushButton
+    on_press:
+      then:
+        - button.press: reboot
+      
+sensor:
+  - platform: dsmr
+    energy_delivered_tariff1:
+      name: "Energy Consumed Tariff 1"
+      state_class: total_increasing
+      device_class: energy
+    energy_delivered_tariff2:
+      name: "Energy Consumed Tariff 2"
+      state_class: total_increasing
+      device_class: energy
+    energy_returned_tariff1:
+      name: "Energy Produced Tariff 1"
+      state_class: total_increasing
+    energy_returned_tariff2:
+      name: "Energy Produced Tariff 2"
+      state_class: total_increasing
+    power_delivered:
+      name: "Power Consumed"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - throttle_average: 5s
+        - multiply: 1000
+    power_returned:
+      name: "Power Produced"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - throttle_average: 5s
+        - multiply: 1000
+    electricity_failures:
+      name: "Electricity Failures"
+      icon: mdi:alert
+    electricity_long_failures:
+      name: "Long Electricity Failures"
+      icon: mdi:alert
+    voltage_l1:
+      id: voltage_l1
+      name: "Voltage Phase 1"
+      filters:
+        - throttle_average: 5s
+    voltage_l2:
+      id: voltage_l2
+      name: "Voltage Phase 2"
+      filters:
+        - throttle_average: 5s
+    voltage_l3:
+      id: voltage_l3
+      name: "Voltage Phase 3"
+      filters:
+        - throttle_average: 5s
+    power_delivered_l1:
+      id: power_delivered_l1
+      name: "Power Consumed Phase 1"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - throttle_average: 5s
+        - multiply: 1000
+    power_delivered_l2:
+      id: power_delivered_l2
+      name: "Power Consumed Phase 2"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - throttle_average: 5s
+        - multiply: 1000
+    power_delivered_l3:
+      id: power_delivered_l3
+      name: "Power Consumed Phase 3"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - throttle_average: 5s
+        - multiply: 1000
+    power_returned_l1:
+      id: power_returned_l1
+      name: "Power Produced Phase 1"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - throttle_average: 5s
+        - multiply: 1000
+    power_returned_l2:
+      id: power_returned_l2
+      name: "Power Produced Phase 2"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - throttle_average: 5s
+        - multiply: 1000
+    power_returned_l3:
+      id: power_returned_l3
+      name: "Power Produced Phase 3"
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - throttle_average: 5s
+        - multiply: 1000
+    gas_delivered:
+      name: "Gas Consumed"
+      state_class: total_increasing
+      
+text_sensor:
+  - platform: dsmr
+    telegram:
+      name: "telegram"
+      disabled_by_default: true
+      on_value:
+        then:
+          - lambda: |-
+              p1_bridge_uart->write_str(x.c_str());
+          - mqtt.publish:
+              topic: "SmartEVSE-59497/Set/MainsMeter"
+              payload: !lambda |-
+                char buf[100];
+
+                snprintf(buf, sizeof(buf), "%.0f:%.0f:%.0f",            // MainsMeter
+                  (10 * (id(power_delivered_l1).state - id(power_returned_l1).state) / id(voltage_l1).state),   // deci-Amps (Active only)
+                  (10 * (id(power_delivered_l2).state - id(power_returned_l2).state) / id(voltage_l2).state),
+                  (10 * (id(power_delivered_l3).state - id(power_returned_l3).state) / id(voltage_l3).state));
+
+                return buf;
+    identification:
+      name: "DSMR Identification"
+    p1_version:
+      name: "DSMR Version"
+
+mqtt:
+  broker: 192.168.1.2
+  username: !secret wican_mqtt_user
+  password: !secret wican_mqtt_password
+  discovery: false
+  topic_prefix: null
+  log_topic: null
