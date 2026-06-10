@@ -31,13 +31,6 @@ obd:
       interval: 30s
       id: tpms
       reply_length: 24
-    - can_id: 0x7a0
-      pid: 0x22b00e
-      interval: 30s
-      wake: true
-      slow_interval: 1800s
-      id: bcm_1
-      reply_length: 16
     - can_id: 0x770
       pid: 0x22bc04
       interval: 30s
@@ -274,13 +267,6 @@ binary_sensor:
     name: 'Charging'
     id: charging
     device_class: battery_charging
-  - platform: obd
-    pid_id: bcm_1
-    index: 10
-    mask: 0x20
-    name: 'Charge port'
-    id: charge_port_open
-    device_class: opening
   - platform: obd
     pid_id: igmp
     index: 10
