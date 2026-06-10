@@ -31,6 +31,13 @@ obd:
       interval: 30s
       id: tpms
       reply_length: 24
+    - can_id: 0x770
+      pid: 0x22bc04
+      interval: 30s
+      wake: true
+      slow_interval: 3600s
+      id: igmp
+      reply_length: 16
 
 sensor:
   - platform: obd
@@ -227,3 +234,12 @@ binary_sensor:
     name: 'Charging'
     id: charging
     device_class: battery_charging
+  - platform: obd
+    pid_id: igmp
+    index: 10
+    mask: 0x0c
+    name: 'Lock status'
+    id: doors_locked
+    device_class: lock
+    filters:
+      - invert
