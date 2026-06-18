@@ -80,9 +80,9 @@ switch:
     id: polling_enabled
     optimistic: true
     turn_on_action:
-      - component.resume: obd_component
+      - obd.set_polling_speed: fast
     turn_off_action:
-      - component.suspend: obd_component
+      - obd.set_polling_speed: slow
     on_turn_on:
       - light.turn_on: status_led_active
       - script.execute: set_polling_status
@@ -125,6 +125,8 @@ binary_sensor:
 obd:
   id: obd_component
   canbus_id: can_bus
+  enabled_by_default: true
+  polling_speed: slow
 
 wifi:
   ssid: !remove
@@ -163,7 +165,6 @@ mqtt:
 
 external_components:
   - source:
-      type: git
-      url: https://github.com/abstractionnl/esphome
-      ref: obd_component
+      type: local
+      path: ../esphome/esphome/esphome/components
     components: [obd]
