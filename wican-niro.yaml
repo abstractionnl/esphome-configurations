@@ -219,6 +219,15 @@ sensor:
     lambda: !lambda return (id(hv_battery_current).state * id(hv_battery_voltage).state)/1000;
     update_interval: never
 
+text_sensor:
+  - platform: template
+    name: 'EVCC Status'
+    id: evcc_status
+    lambda: |-
+      if (id(charging).state) return {"C"};
+      if (id(charger_connected).state) return {"B"};
+      return {"A"};
+
 binary_sensor:
   - platform: obd
     pid_id: bms_1
