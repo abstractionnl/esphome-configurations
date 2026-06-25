@@ -189,6 +189,7 @@ text_sensor:
       on_value:
         then:
           - lambda: |-
+              ESP_LOGV("dsmr", "telegram: %s", x.c_str());
               p1_bridge_uart->write_str(x.c_str());
           - mqtt.publish:
               topic: "SmartEVSE-59497/Set/MainsMeter"
