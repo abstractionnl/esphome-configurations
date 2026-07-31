@@ -130,6 +130,22 @@ sensor:
     unit_of_measurement: "°C"
     filters:
       - offset: -0.2
+    on_value:
+      - lambda: |-
+          if (id(climate_control).mode != CLIMATE_MODE_COOL) return;
+          const float current_temp = x;
+          const float target_temp = id(climate_control).target_temperature;
+          if (std::isnan(current_temp) || std::isnan(target_temp)) return;
+          auto current_fan = id(climate_control).fan_mode.value_or(esphome::climate::CLIMATE_FAN_AUTO);
+          if (current_temp > target_temp && current_fan != esphome::climate::CLIMATE_FAN_AUTO) {
+            auto call = id(climate_control).make_call();
+            call.set_fan_mode(esphome::climate::CLIMATE_FAN_AUTO);
+            call.perform();
+          } else if (current_temp < target_temp && current_fan != esphome::climate::CLIMATE_FAN_QUIET) {
+            auto call = id(climate_control).make_call();
+            call.set_fan_mode(esphome::climate::CLIMATE_FAN_QUIET);
+            call.perform();
+          }
   #      - offset: !lambda |-
   #          if (id(climate_control).mode == CLIMATE_MODE_HEAT) {
   #              return -0.2;
