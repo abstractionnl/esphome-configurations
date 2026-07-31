@@ -1,0 +1,209 @@
+substitutions:
+  min_temperature: 14
+  max_temperature: 24
+
+esphome:
+  platformio_options:
+    # Run CPU at 160Mhz to fix mhi_ac_ctrl_core.loop error: -2
+    board_build.f_cpu: 160000000L
+
+esp8266:
+  board: d1_mini
+
+external_components:
+  - source: github://ginkage/MHI-AC-Ctrl-ESPHome@master
+    components: [MhiAcCtrl]
+
+# Version 4.0
+MhiAcCtrl:
+  # Only 20 (legacy) or 33 (includes 3D auto and vertical vanes) possible.
+  # If you encounter mhi_ac_ctrl_core.loop error: -2 errors, change the frame_size to 20
+  frame_size: 33
+  external_temperature_sensor: room_temperature_sensor
+  initial_vertical_vanes_position: 1
+  initial_horizontal_vanes_position: 8
+  room_temp_timeout: 30
+
+climate:
+  - platform: MhiAcCtrl
+    id: climate_control
+    name: "Airco"
+    temperature_offset: true
+    visual_min_temperature: ${min_temperature}
+    on_state:
+      - lambda: |-
+          if (x.mode == CLIMATE_MODE_HEAT_COOL) {
+            if (id(room_temperature_sensor).state <= id(auto_cooling_temperature).state)
+              id(quiet_heating_mode).execute(id(auto_heating_temperature).state);
+            else
+              id(quiet_cooling_mode).execute(id(auto_cooling_temperature).state);
+          }
+
+sensor:
+  #external temperature sensor
+  - platform: homeassistant
+    name: "Temperature Sensor From Home Assistant"
+    id: room_temperature_sensor
+    entity_id: ${temperature_sensor}
+    internal: false
+    accuracy_decimals: 1
+    state_class: measurement
+    device_class: temperature
+    unit_of_measurement: "°C"
+    filters:
+      - offset: -0.2
+  #      - offset: !lambda |-
+  #          if (id(climate_control).mode == CLIMATE_MODE_HEAT) {
+  #              return -0.2;
+  #          } else if (id(climate_control).mode == CLIMATE_MODE_COOL) {
+  #              return -1.0;
+  #          } else {
+  #              return 0;
+  #          }
+  - platform: MhiAcCtrl
+    outdoor_temperature:
+      name: "Outdoor temperature"
+    return_air_temperature:
+      name: "Return air temperature"
+    outdoor_unit_fan_speed:
+      name: "Outdoor unit fan speed"
+      state_class: measurement
+    indoor_unit_fan_speed:
+      name: "Indoor unit fan speed"
+      state_class: measurement
+    compressor_frequency:
+      name: "Compressor frequency"
+    current_power:
+      name: "Current draw"
+    energy_used:
+      name: "Energy used"
+    indoor_unit_thi_r1:
+      name: "Indoor (U-bend) HE temp 1"
+    indoor_unit_thi_r2:
+      name: "Indoor (capillary) HE temp 2"
+    indoor_unit_thi_r3:
+      name: "Indoor (suction header) HE temp 3"
+    outdoor_unit_tho_r1:
+      name: "Outdoor HE temp"
+    outdoor_unit_expansion_valve:
+      name: "Outdoor unit exp. valve"
+    outdoor_unit_discharge_pipe:
+      name: "Outdoor unit discharge pipe"
+    outdoor_unit_discharge_pipe_super_heat:
+      name: "Outdoor unit discharge pipe super heat"
+    protection_state_number:
+      name: "Compressor protection code"
+    error_code:
+      name: "Error code"
+
+binary_sensor:
+  - platform: MhiAcCtrl
+    defrost:
+      name: "Defrost"
+  - platform: template
+    name: "Low temperature protection active"
+    id: low_temperature_protection_active
+    lambda: |-
+      return id(low_temperature_protection_active).state
+          ? id(room_temperature_sensor).raw_state <= id(low_temperature_threshold).state + 0.5
+          : id(room_temperature_sensor).raw_state <= id(low_temperature_threshold).state;
+    filters:
+      - delayed_off: 10min
+    on_press:
+      then:
+        - climate.control:
+            id: climate_control
+            mode: "HEAT"
+            target_temperature: !lambda return id(low_temperature_threshold).state;
+    on_release:
+      - climate.control:
+          id: climate_control
+          mode: "OFF"
+
+text_sensor:
+  - platform: MhiAcCtrl
+    protection_state:
+      name: "Compressor protection status"
+
+select:
+  - platform: MhiAcCtrl
+    vertical_vanes:
+      name: Vertical Vanes Position
+      id: vertical_vanes_control
+    fan_speed:
+      name: "Fan Speed"
+
+button:
+  - platform: template
+    name: "Enable quiet cooling"
+    on_press:
+      - script.execute:
+          id: quiet_cooling_mode
+          target_temperature: !lambda return id(auto_cooling_temperature).state;
+  - platform: template
+    name: "Enable quiet heating"
+    on_press:
+      - script.execute:
+          id: quiet_heating_mode
+          target_temperature: !lambda return id(auto_heating_temperature).state;
+
+number:
+  - platform: template
+    id: auto_heating_temperature
+    name: "Auto mode heating temperature"
+    min_value: ${min_temperature}
+    max_value: ${max_temperature}
+    step: 0.5
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 20
+    device_class: temperature
+    unit_of_measurement: "°C"
+    entity_category: diagnostic
+  - platform: template
+    id: auto_cooling_temperature
+    name: "Auto mode cooling temperature"
+    min_value: ${min_temperature}
+    max_value: ${max_temperature}
+    step: 0.5
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 21
+    device_class: temperature
+    unit_of_measurement: "°C"
+    entity_category: diagnostic
+  - platform: template
+    id: low_temperature_threshold
+    name: "Low temperature threshold"
+    min_value: ${min_temperature}
+    max_value: ${max_temperature}
+    step: 0.5
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: ${min_temperature}
+    device_class: temperature
+    unit_of_measurement: "°C"
+    entity_category: diagnostic
+
+script:
+  - id: quiet_cooling_mode
+    parameters:
+      target_temperature: float
+    then:
+      - climate.control:
+          id: climate_control
+          mode: COOL
+          target_temperature: !lambda return target_temperature;
+          fan_mode: AUTO
+  - id: quiet_heating_mode
+    parameters:
+      target_temperature: float
+    then:
+      - climate.control:
+          id: climate_control
+          mode: HEAT
+          target_temperature: !lambda return target_temperature;
+          fan_mode: AUTO

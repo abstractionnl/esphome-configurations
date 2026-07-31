@@ -165,6 +165,7 @@ mqtt:
 
 external_components:
   - source:
-      type: local
-      path: ../esphome/esphome/esphome/components
+      type: git
+      url: https://github.com/abstractionnl/esphome
+      ref: obd_component
     components: [obd]
