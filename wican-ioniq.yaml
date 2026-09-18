@@ -344,7 +344,6 @@ binary_sensor:
     device_class: door
   - platform: obd
     pid_id: igpm_doors
-    +
     index: 10
     mask: 0x80
     name: 'Trunk'
