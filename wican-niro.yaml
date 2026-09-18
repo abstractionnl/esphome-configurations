@@ -32,6 +32,13 @@ obd:
       id: tpms
       reply_length: 24
     - can_id: 0x770
+      pid: 0x22bc03
+      interval: 30s
+      wake: true
+      slow_interval: 3600s
+      id: igpm_doors
+      reply_length: 16
+    - can_id: 0x770
       pid: 0x22bc04
       interval: 30s
       wake: true
@@ -252,3 +259,45 @@ binary_sensor:
     device_class: lock
     filters:
       - invert
+  - platform: obd
+    pid_id: igpm_doors
+    index: 10
+    mask: 0x20
+    name: 'Driver Door'
+    id: door_drv_open
+    device_class: door
+  - platform: obd
+    pid_id: igpm_doors
+    index: 10
+    mask: 0x10
+    name: 'Passenger Door'
+    id: door_pas_open
+    device_class: door
+  - platform: obd
+    pid_id: igpm_doors
+    index: 10
+    mask: 0x01
+    name: 'Rear Left Door'
+    id: door_rl_open
+    device_class: door
+  - platform: obd
+    pid_id: igpm_doors
+    index: 10
+    mask: 0x04
+    name: 'Rear Right Door'
+    id: door_rr_open
+    device_class: door
+  - platform: obd
+    pid_id: igpm_doors
+    index: 10
+    mask: 0x80
+    name: 'Trunk'
+    id: trunk_open
+    device_class: door
+  - platform: obd
+    pid_id: igpm_doors
+    index: 11
+    mask: 0x01
+    name: 'Hood'
+    id: hood_open
+    device_class: door
