@@ -17,7 +17,8 @@ api:
 # Enable OTA updates
 ota:
   - platform: esphome
-    password: !secret ota_key
+    encryption:
+      key: !secret api_key
 
 # Restart buttons
 button:
